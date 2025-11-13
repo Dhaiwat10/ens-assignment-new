@@ -10,6 +10,7 @@ import {
   Flex,
   FlexGap,
   Link,
+  ProfileAvatar,
   Spinner,
   Text,
 } from '@pancakeswap/uikit'
@@ -24,6 +25,7 @@ import { useSwitchNetwork } from 'hooks/useSwitchNetwork'
 import { useCallback, useMemo } from 'react'
 import { styled } from 'styled-components'
 import { getBlockExploreLink, getBlockExploreName } from 'utils'
+import { useEnsAvatar } from 'wagmi'
 
 const Wrapper = styled.div`
   width: 100%;
@@ -34,6 +36,17 @@ const Section = styled(AutoColumn)`
 
 const ConfirmedIcon = styled(ColumnCenter)`
   padding: 24px 0;
+`
+
+const AvatarContainer = styled(Box)`
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 `
 
 interface SendTransactionModalProps {
@@ -81,6 +94,16 @@ export function ConfirmTransactionContent({
   const nativeCurrency = useNativeCurrency(asset.chainId)
   const { switchNetworkAsync } = useSwitchNetwork()
 
+  // Fetch ENS avatar if recipientInput is an ENS name
+  const isENSName = recipientInput && recipientInput !== recipient && !recipientInput.startsWith('0x')
+  const { data: ensAvatar } = useEnsAvatar({
+    name: isENSName ? (recipientInput as string) : undefined,
+    chainId: ChainId.ETHEREUM,
+    query: {
+      enabled: Boolean(isENSName),
+    },
+  })
+
   const tokenAmount = useMemo(() => {
     const currency = new Token(
       asset.chainId,
@@ -111,11 +134,18 @@ export function ConfirmTransactionContent({
             <Text color="textSubtle">{t('To')}</Text>
             <Box maxWidth="70%" style={{ wordBreak: 'break-all', textAlign: 'right' }}>
               {recipientInput && recipientInput !== recipient && !recipientInput.startsWith('0x') ? (
-                <FlexGap flexDirection="column" alignItems="flex-end" gap="4px">
-                  <Text>{recipientInput}</Text>
-                  <Text fontSize="12px" color="textSubtle">
-                    {recipient}
-                  </Text>
+                <FlexGap alignItems="center" gap="8px" justifyContent="flex-end">
+                  {ensAvatar && (
+                    <AvatarContainer>
+                      <ProfileAvatar src={ensAvatar} width={32} height={32} />
+                    </AvatarContainer>
+                  )}
+                  <FlexGap flexDirection="column" alignItems="flex-end" gap="4px">
+                    <Text>{recipientInput}</Text>
+                    <Text fontSize="12px" color="textSubtle">
+                      {recipient}
+                    </Text>
+                  </FlexGap>
                 </FlexGap>
               ) : (
                 <Text>{recipient}</Text>

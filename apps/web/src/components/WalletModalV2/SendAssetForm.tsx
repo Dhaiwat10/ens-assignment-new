@@ -13,6 +13,8 @@ import {
   IconButton,
   Input,
   LazyAnimatePresence,
+  NoProfileAvatarIcon,
+  ProfileAvatar,
   Text,
   domAnimation,
   useToast,
@@ -33,7 +35,7 @@ import { logGTMGiftPreviewEvent } from 'utils/customGTMEventTracking'
 import { maxAmountSpend } from 'utils/maxAmountSpend'
 import { safeGetAddress } from 'utils'
 import { checksumAddress, formatUnits, isAddress, zeroAddress } from 'viem'
-import { useAccount, useEnsAddress, usePublicClient, useSendTransaction } from 'wagmi'
+import { useAccount, useEnsAddress, useEnsAvatar, usePublicClient, useSendTransaction } from 'wagmi'
 import { CreateGiftView } from 'views/Gift/components/CreateGiftView'
 import { SendGiftToggle } from 'views/Gift/components/SendGiftToggle'
 import { CHAINS_WITH_GIFT_CLAIM } from 'views/Gift/constants'
@@ -79,6 +81,89 @@ const AddressInputWrapper = styled(Box)`
   margin-bottom: 4px;
 `
 
+const InputWrapper = styled(Box)<{ $isError?: boolean }>`
+  position: relative;
+  width: 100%;
+  min-height: 72px;
+  background-color: ${({ theme }) => theme.colors.input};
+  border-radius: 16px;
+  border: 1px solid ${({ theme, $isError }) => ($isError ? theme.colors.failure : theme.colors.inputSecondary)};
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 12px;
+  overflow: hidden;
+
+  &:focus-within {
+    border-color: ${({ theme, $isError }) => ($isError ? theme.colors.failure : theme.colors.primary)};
+  }
+`
+
+const AvatarContainer = styled(Box)`
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`
+
+const InputContent = styled(Box)`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+`
+
+const InputWithAvatar = styled(Input)`
+  width: 100%;
+  border: none;
+  background: transparent;
+  background-color: transparent;
+  padding: 0;
+  font-size: 16px;
+  outline: none;
+  color: ${({ theme }) => theme.colors.text};
+  box-shadow: none;
+  border-radius: 0;
+  text-decoration: none;
+
+  &::placeholder {
+    color: ${({ theme }) => theme.colors.textSubtle};
+    opacity: 1;
+  }
+
+  &:focus {
+    box-shadow: none;
+    outline: none;
+    border: none;
+    text-decoration: none;
+  }
+
+  &:focus::placeholder {
+    opacity: 0.5;
+  }
+`
+
+const ResolvedAddressText = styled(Text)`
+  font-size: 12px;
+  color: ${({ theme }) => theme.colors.textSubtle};
+  margin-top: 4px;
+  word-break: break-word;
+  line-height: 1.2;
+  max-height: 64px;
+  overflow: hidden;
+`
+
+const StyledNoProfileAvatarIcon = styled(NoProfileAvatarIcon)`
+  width: 100%;
+  height: 100%;
+`
+
 const ClearButton = styled(IconButton)`
   width: 20px;
   height: 20px;
@@ -122,6 +207,15 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
   )
 
   const { data: ensResolvedAddress, isLoading: isResolvingENS } = useEnsAddress({
+    name: debouncedRawRecipientInput || undefined,
+    chainId: ChainId.ETHEREUM, // Always resolve against Ethereum mainnet
+    query: {
+      enabled: Boolean(debouncedRawRecipientInput && isPotentialENSName),
+    },
+  })
+
+  // Fetch ENS avatar for the ENS name (fetch as soon as we detect a potential ENS name)
+  const { data: ensAvatar, isLoading: isResolvingAvatar } = useEnsAvatar({
     name: debouncedRawRecipientInput || undefined,
     chainId: ChainId.ETHEREUM, // Always resolve against Ethereum mainnet
     query: {
@@ -419,25 +513,33 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
             {isSendGiftOn ? null : (
               <Box>
                 <AddressInputWrapper>
-                  <Box position="relative">
-                    <Input
-                      value={rawRecipientInput ?? ''}
-                      onChange={handleAddressChange}
-                      placeholder={t('Recipient address or ENS name')}
-                      style={{ height: '64px' }}
-                      isError={Boolean(addressError)}
-                    />
+                  <InputWrapper $isError={Boolean(addressError)}>
+                    {rawRecipientInput && !isAddress(rawRecipientInput) && isPotentialENSName && (
+                      <AvatarContainer>
+                        {ensAvatar ? (
+                          <ProfileAvatar src={ensAvatar} width={32} height={32} />
+                        ) : (
+                          <StyledNoProfileAvatarIcon />
+                        )}
+                      </AvatarContainer>
+                    )}
+                    <InputContent>
+                      <InputWithAvatar
+                        value={rawRecipientInput ?? ''}
+                        onChange={handleAddressChange}
+                        placeholder={t('Wallet Address')}
+                        isError={Boolean(addressError)}
+                      />
+                      {address && rawRecipientInput && !isAddress(rawRecipientInput) && (
+                        <ResolvedAddressText title={address}>{address}</ResolvedAddressText>
+                      )}
+                    </InputContent>
                     {rawRecipientInput && (
-                      <ClearButton
-                        scale="sm"
-                        onClick={handleClearAddress}
-                        style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)' }}
-                        variant="tertiary"
-                      >
+                      <ClearButton scale="sm" onClick={handleClearAddress} style={{ flexShrink: 0 }} variant="tertiary">
                         <CloseIcon color="textSubtle" />
                       </ClearButton>
                     )}
-                  </Box>
+                  </InputWrapper>
                 </AddressInputWrapper>
                 {isResolvingENS && (
                   <Text color="textSubtle" fontSize="14px" mt="4px">
@@ -445,11 +547,6 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
                   </Text>
                 )}
                 {addressError && <ErrorMessage>{addressError}</ErrorMessage>}
-                {address && rawRecipientInput && !isAddress(rawRecipientInput) && (
-                  <Text color="textSubtle" fontSize="12px" mt="4px">
-                    {t('Resolved to: %address%', { address: `${address.slice(0, 6)}...${address.slice(-4)}` })}
-                  </Text>
-                )}
               </Box>
             )}
 
