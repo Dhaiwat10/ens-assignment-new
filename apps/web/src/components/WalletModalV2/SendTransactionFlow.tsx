@@ -40,6 +40,7 @@ interface SendTransactionModalProps {
   asset: BalanceData
   amount: string
   recipient: string
+  recipientInput?: string // Raw input (could be ENS name or address)
   onDismiss?: () => void
   onBack?: () => void
   txHash?: string
@@ -58,6 +59,7 @@ export function ConfirmTransactionContent({
   asset,
   amount,
   recipient,
+  recipientInput,
   onConfirm,
   estimatedFee,
   estimatedFeeUsd,
@@ -65,6 +67,7 @@ export function ConfirmTransactionContent({
   asset: BalanceData
   amount: string
   recipient: string
+  recipientInput?: string
   onConfirm: () => void
   estimatedFee?: string | null
   estimatedFeeUsd?: string | null
@@ -77,8 +80,6 @@ export function ConfirmTransactionContent({
   const isChainMatched = chainId === asset.chainId
   const nativeCurrency = useNativeCurrency(asset.chainId)
   const { switchNetworkAsync } = useSwitchNetwork()
-
-  const price = asset.price?.usd ?? 0
 
   const tokenAmount = useMemo(() => {
     const currency = new Token(
@@ -109,7 +110,16 @@ export function ConfirmTransactionContent({
           <Flex justifyContent="space-between" width="100%" mb="8px" alignItems="flex-start">
             <Text color="textSubtle">{t('To')}</Text>
             <Box maxWidth="70%" style={{ wordBreak: 'break-all', textAlign: 'right' }}>
-              <Text>{recipient}</Text>
+              {recipientInput && recipientInput !== recipient && !recipientInput.startsWith('0x') ? (
+                <FlexGap flexDirection="column" alignItems="flex-end" gap="4px">
+                  <Text>{recipientInput}</Text>
+                  <Text fontSize="12px" color="textSubtle">
+                    {recipient}
+                  </Text>
+                </FlexGap>
+              ) : (
+                <Text>{recipient}</Text>
+              )}
             </Box>
           </Flex>
 
@@ -239,6 +249,7 @@ const SendTransactionContent: React.FC<React.PropsWithChildren<SendTransactionMo
   asset,
   amount,
   recipient,
+  recipientInput,
   onDismiss,
   txHash,
   attemptingTxn,
@@ -274,6 +285,7 @@ const SendTransactionContent: React.FC<React.PropsWithChildren<SendTransactionMo
           asset={asset}
           amount={amount}
           recipient={recipient}
+          recipientInput={recipientInput}
           onConfirm={onConfirm}
           estimatedFee={estimatedFee}
           estimatedFeeUsd={estimatedFeeUsd}

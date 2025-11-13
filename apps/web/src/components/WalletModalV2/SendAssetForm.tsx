@@ -31,16 +31,19 @@ import { useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import styled from 'styled-components'
 import { logGTMGiftPreviewEvent } from 'utils/customGTMEventTracking'
 import { maxAmountSpend } from 'utils/maxAmountSpend'
+import { safeGetAddress } from 'utils'
 import { checksumAddress, formatUnits, isAddress, zeroAddress } from 'viem'
+import { useAccount, useEnsAddress, usePublicClient, useSendTransaction } from 'wagmi'
 import { CreateGiftView } from 'views/Gift/components/CreateGiftView'
 import { SendGiftToggle } from 'views/Gift/components/SendGiftToggle'
 import { CHAINS_WITH_GIFT_CLAIM } from 'views/Gift/constants'
 import { SendGiftContext, useSendGiftContext } from 'views/Gift/providers/SendGiftProvider'
 import { useUserInsufficientBalanceLight } from 'views/SwapSimplify/hooks/useUserInsufficientBalance'
-import { useAccount, usePublicClient, useSendTransaction } from 'wagmi'
 import { ActionButton } from './ActionButton'
 import SendTransactionFlow from './SendTransactionFlow'
 import { ViewState } from './type'
+
+const ENS_NAME_REGEX = /^[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&/=]*)?$/
 
 const FormContainer = styled(Box)`
   display: flex;
@@ -98,13 +101,50 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
   const isSendGiftSupported = isSendGift && isGiftSupported
 
   const { t } = useTranslation()
-  const [address, setAddress] = useState<string | null>(null)
-  const debouncedAddress = useDebounce(address, 500)
+  // Track raw input (could be ENS name or address)
+  const [rawRecipientInput, setRawRecipientInput] = useState<string | null>(null)
+  const debouncedRawRecipientInput = useDebounce(rawRecipientInput, 500)
   const [amount, setAmount] = useState('')
   const [addressError, setAddressError] = useState('')
   const [estimatedFee, setEstimatedFee] = useState<string | null>(null)
   const [estimatedFeeUsd, setEstimatedFeeUsd] = useState<string | null>(null)
   const [isInputFocus, setIsInputFocus] = useState(false)
+
+  // Resolve ENS names against Ethereum mainnet (works on all EVM chains)
+  const isPotentialENSName = useMemo(
+    () =>
+      Boolean(
+        debouncedRawRecipientInput &&
+          ENS_NAME_REGEX.test(debouncedRawRecipientInput) &&
+          !isAddress(debouncedRawRecipientInput),
+      ),
+    [debouncedRawRecipientInput],
+  )
+
+  const { data: ensResolvedAddress, isLoading: isResolvingENS } = useEnsAddress({
+    name: debouncedRawRecipientInput || undefined,
+    chainId: ChainId.ETHEREUM, // Always resolve against Ethereum mainnet
+    query: {
+      enabled: Boolean(debouncedRawRecipientInput && isPotentialENSName),
+    },
+  })
+
+  // Determine the resolved address: use direct address if valid, otherwise use ENS resolution
+  const resolvedAddress = useMemo(() => {
+    if (!debouncedRawRecipientInput) return null
+    // If it's already a valid address, use it directly
+    if (isAddress(debouncedRawRecipientInput)) {
+      return safeGetAddress(debouncedRawRecipientInput) || debouncedRawRecipientInput
+    }
+    // Otherwise, use ENS resolution result
+    if (ensResolvedAddress) {
+      return safeGetAddress(ensResolvedAddress) || ensResolvedAddress
+    }
+    return null
+  }, [debouncedRawRecipientInput, ensResolvedAddress])
+
+  // Use resolved address for all operations
+  const address = resolvedAddress
 
   const [txHash, setTxHash] = useState<string | undefined>(undefined)
   const { address: accountAddress } = useAccount()
@@ -221,7 +261,7 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
       )
       // Reset form after successful transaction
       setAmount('')
-      setAddress('')
+      setRawRecipientInput('')
     }
 
     return receipt
@@ -240,20 +280,42 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
 
   const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = e.target
-    setAddress(value)
+    setRawRecipientInput(value)
   }
 
-  // Use debounced address for validation to avoid checking on every keystroke
+  // Use debounced input for validation to avoid checking on every keystroke
   useEffect(() => {
-    if (debouncedAddress && !isAddress(debouncedAddress)) {
-      setAddressError(t('Invalid wallet address'))
-    } else {
+    if (!debouncedRawRecipientInput) {
       setAddressError('')
+      return
     }
-  }, [debouncedAddress, t])
+
+    // If it's a valid address, no error
+    if (isAddress(debouncedRawRecipientInput)) {
+      setAddressError('')
+      return
+    }
+
+    // If it looks like an ENS name, check if resolution is in progress or failed
+    if (isPotentialENSName) {
+      if (isResolvingENS) {
+        // Still resolving, don't show error yet
+        setAddressError('')
+      } else if (!ensResolvedAddress) {
+        // Resolution failed or no result
+        setAddressError(t('ENS name not found or invalid'))
+      } else {
+        // Resolution succeeded
+        setAddressError('')
+      }
+    } else {
+      // Doesn't look like an address or ENS name
+      setAddressError(t('Invalid wallet address or ENS name'))
+    }
+  }, [debouncedRawRecipientInput, isPotentialENSName, isResolvingENS, ensResolvedAddress, t])
 
   const handleClearAddress = () => {
-    setAddress('')
+    setRawRecipientInput('')
     setAddressError('')
   }
 
@@ -310,8 +372,10 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
 
   const isValidAddress = useMemo(() => {
     // send gift doesn't need to check address
-    return isSendGiftSupported ? true : address && !addressError
-  }, [address, addressError, isSendGiftSupported])
+    if (isSendGiftSupported) return true
+    // Must have a resolved address and no errors, and not be in the middle of resolving ENS
+    return Boolean(address && !addressError && !isResolvingENS)
+  }, [address, addressError, isSendGiftSupported, isResolvingENS])
 
   if (viewState === ViewState.CONFIRM_TRANSACTION && isSendGiftSupported) {
     return <CreateGiftView key={viewState} tokenAmount={tokenAmount} />
@@ -323,6 +387,7 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
         asset={asset}
         amount={amount}
         recipient={address as string}
+        recipientInput={rawRecipientInput || undefined}
         onDismiss={() => {
           onViewStateChange(ViewState.SEND_ASSETS)
           setTxHash(undefined)
@@ -356,13 +421,13 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
                 <AddressInputWrapper>
                   <Box position="relative">
                     <Input
-                      value={address ?? ''}
+                      value={rawRecipientInput ?? ''}
                       onChange={handleAddressChange}
-                      placeholder="Recipient address"
+                      placeholder={t('Recipient address or ENS name')}
                       style={{ height: '64px' }}
                       isError={Boolean(addressError)}
                     />
-                    {address && (
+                    {rawRecipientInput && (
                       <ClearButton
                         scale="sm"
                         onClick={handleClearAddress}
@@ -374,7 +439,17 @@ export const SendAssetForm: React.FC<SendAssetFormProps> = ({ asset, onViewState
                     )}
                   </Box>
                 </AddressInputWrapper>
+                {isResolvingENS && (
+                  <Text color="textSubtle" fontSize="14px" mt="4px">
+                    {t('Resolving ENS name...')}
+                  </Text>
+                )}
                 {addressError && <ErrorMessage>{addressError}</ErrorMessage>}
+                {address && rawRecipientInput && !isAddress(rawRecipientInput) && (
+                  <Text color="textSubtle" fontSize="12px" mt="4px">
+                    {t('Resolved to: %address%', { address: `${address.slice(0, 6)}...${address.slice(-4)}` })}
+                  </Text>
+                )}
               </Box>
             )}
 
