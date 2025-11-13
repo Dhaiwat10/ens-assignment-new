@@ -23,6 +23,7 @@ import { isAddress } from 'viem'
 
 import { useActiveChainId } from 'hooks/useActiveChainId'
 import useNativeCurrency from 'hooks/useNativeCurrency'
+import { useGetENSAddressByName } from 'hooks/useGetENSAddressByName'
 import { useAllLists, useInactiveListUrls } from 'state/lists/hooks'
 import { safeGetAddress } from 'utils'
 
@@ -131,7 +132,16 @@ function CurrencySearch({
   const { t } = useTranslation()
   const account = useAccount()
   const [searchQuery, setSearchQuery] = useState<string>('')
-  const debouncedQuery = useDebounce(getTokenAddressFromSymbolAlias(searchQuery, selectedChainId, searchQuery), 200)
+  const debouncedSearchQuery = useDebounce(searchQuery, 200)
+  // Try to resolve ENS name to address
+  const ensResolvedAddress = useGetENSAddressByName(debouncedSearchQuery, selectedChainId)
+  // Use ENS resolved address if available, otherwise use the original query with symbol alias resolution
+  const debouncedQuery = useMemo(() => {
+    if (ensResolvedAddress) {
+      return ensResolvedAddress
+    }
+    return getTokenAddressFromSymbolAlias(debouncedSearchQuery, selectedChainId, debouncedSearchQuery)
+  }, [ensResolvedAddress, debouncedSearchQuery, selectedChainId])
   // refs for fixed size lists
   const fixedList = useRef<FixedSizeList>()
 
