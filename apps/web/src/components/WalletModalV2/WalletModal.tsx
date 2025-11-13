@@ -20,8 +20,9 @@ import { TabsComponent } from 'components/Menu/UserMenu/WalletModal'
 import { usePrivy } from '@privy-io/react-auth'
 import { ASSET_CDN } from 'config/constants/endpoints'
 import { useAddressBalance } from 'hooks/useAddressBalance'
+import { useDomainNameForAddress } from 'hooks/useDomain'
 import { useRouter } from 'next/router'
-import React, { useCallback, useMemo } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import styled from 'styled-components'
 import { formatAmount } from 'utils/formatInfoNumbers'
 import { ClaimGiftConfirmView } from 'views/Gift/components/ClaimGiftConfirmView'
@@ -136,12 +137,14 @@ export const WalletContent = ({
   const { viewState, setViewState, goBack, setSendEntry } = useWalletModalV2ViewState()
   const { theme } = useTheme()
   const { authenticated, ready, user, createWallet, setWalletRecovery, enrollInMfa } = usePrivy()
+  const [isEnsModalOpen, setIsEnsModalOpen] = useState(false)
 
   // Fetch balances using the hook we created
   const { balances, isLoading, totalBalanceUsd } = useAddressBalance(account, {
     includeSpam: false,
     onlyWithPrice: false,
   })
+  const { ensName } = useDomainNameForAddress(account)
   const balanceDisplay = useMemo(() => {
     const display = formatAmount(totalBalanceUsd)?.split('.')
     return {
@@ -222,6 +225,13 @@ export const WalletContent = ({
             actionView
           ) : (
             <>
+              {account && !ensName && viewState <= ViewState.SEND_ASSETS && (
+                <Box mb="8px" mt="8px">
+                  <Button variant="tertiary" scale="sm" onClick={() => setIsEnsModalOpen(true)}>
+                    {t('Claim free ENS name')}
+                  </Button>
+                </Box>
+              )}
               <FlexGap alignItems="center" gap="3px">
                 <TotalBalanceInteger>${balanceDisplay.integer}</TotalBalanceInteger>
                 <TotalBalanceDecimal>.{balanceDisplay.decimal}</TotalBalanceDecimal>
@@ -360,6 +370,25 @@ export const WalletContent = ({
           )}
         </>
       )}
+      <ModalV2 isOpen={isEnsModalOpen} onDismiss={() => setIsEnsModalOpen(false)} closeOnOverlayClick>
+        <Modal
+          title={t('Claim free ENS name')}
+          onDismiss={() => setIsEnsModalOpen(false)}
+          minWidth="320px"
+          maxWidth="450px"
+        >
+          <Box maxWidth="450px">
+            <Text mb="16px" lineHeight="1.5">
+              {t(
+                "Hey, I was not able to create a NameStone account, and I was not able to get an API key, so I wasn't able to do this integration. But ideally, this is where I would do the NameStone API integration to give my users a free ENS subdomain for my app.",
+              )}
+            </Text>
+            <Button width="100%" onClick={() => setIsEnsModalOpen(false)}>
+              {t('OK')}
+            </Button>
+          </Box>
+        </Modal>
+      </ModalV2>
     </Box>
   )
 }

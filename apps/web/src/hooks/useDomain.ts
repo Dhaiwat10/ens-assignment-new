@@ -13,24 +13,26 @@ export const useDomainNameForAddress = (address?: `0x${string}` | string, fetchD
     address as Address,
     fetchData && !sidName && !isSidLoading,
   )
+  // Always resolve ENS names against Ethereum mainnet (works on all EVM chains)
   const { data: ensName, isLoading: isEnsLoading } = useEnsName({
     address: address as Address,
-    chainId: chainId === ChainId.GOERLI ? ChainId.GOERLI : ChainId.ETHEREUM,
+    chainId: ChainId.ETHEREUM, // Always resolve against Ethereum mainnet
     query: {
-      enabled: chainId !== ChainId.BSC && chainId !== ChainId.BSC_TESTNET,
+      enabled: Boolean(address && fetchData),
     },
   })
   const { data: ensAvatar, isLoading: isEnsAvatarLoading } = useEnsAvatar({
     name: ensName as string,
-    chainId: chainId === ChainId.GOERLI ? ChainId.GOERLI : ChainId.ETHEREUM,
+    chainId: ChainId.ETHEREUM, // Always resolve against Ethereum mainnet
     query: {
-      enabled: chainId !== ChainId.BSC && chainId !== ChainId.BSC_TESTNET,
+      enabled: Boolean(ensName && fetchData),
     },
   })
 
   return useMemo(() => {
     return {
       domainName: ensName || sidName || unsName,
+      ensName: ensName ?? undefined,
       avatar: ensAvatar ?? undefined,
       isLoading: isEnsLoading || isEnsAvatarLoading || (!ensName && isSidLoading) || (!sidName && isUnsLoading),
     }
