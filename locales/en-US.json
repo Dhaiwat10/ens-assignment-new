@@ -854,6 +854,8 @@
   "Loaded": "Loaded",
   "Loading": "Loading",
   "Enter valid token address": "Enter valid token address",
+  "Enter valid token address or ENS name": "Enter valid token address or ENS name",
+  "Token address or ENS name": "Token address or ENS name",
   "Imported Token": "Imported Token",
   "Imported Tokens": "Imported Tokens",
   "Select a currency": "Select a currency",
