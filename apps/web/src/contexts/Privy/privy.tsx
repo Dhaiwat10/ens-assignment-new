@@ -16,8 +16,14 @@ export function PrivyProvider({ children }: PropsWithChildren) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID
   const clientId = process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID
 
+  // When Privy env vars are not set, gracefully disable Privy
+  // instead of throwing during SSR/prerender.
   if (!appId || !clientId) {
-    console.error('Missing required Privy environment variables')
+    if (process.env.NODE_ENV !== 'production') {
+      // Avoid crashing builds in local/candidate environments without Privy configured
+      console.warn('Privy is disabled: missing NEXT_PUBLIC_PRIVY_APP_ID or NEXT_PUBLIC_PRIVY_CLIENT_ID')
+    }
+    return <>{children}</>
   }
 
   // Show wallet UIs only on bridge pages
@@ -25,8 +31,8 @@ export function PrivyProvider({ children }: PropsWithChildren) {
 
   return (
     <Provider
-      appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? ''}
-      clientId={process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID ?? ''}
+      appId={appId}
+      clientId={clientId}
       config={{
         defaultChain: CHAINS[0],
         customAuth: {

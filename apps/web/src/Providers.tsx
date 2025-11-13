@@ -34,6 +34,36 @@ const Providers: React.FC<
 > = ({ children, store, dehydratedState }) => {
   const wagmiConfig = useMemo(() => createWagmiConfig(), [])
 
+  const isPrivyEnabled = !!process.env.NEXT_PUBLIC_PRIVY_APP_ID && !!process.env.NEXT_PUBLIC_PRIVY_CLIENT_ID
+
+  // When Privy is not configured, fall back to a non-Privy Wagmi provider tree
+  // so that builds succeed without requiring Privy env vars.
+  if (!isPrivyEnabled) {
+    return (
+      <FirebaseAuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <WagmiProvider config={wagmiConfig}>
+            <W3WConfigProvider value={isInBinance()}>
+              <HydrationBoundary state={dehydratedState}>
+                <Provider store={store}>
+                  <NextThemeProvider>
+                    <LanguageProvider>
+                      <StyledUIKitProvider>
+                        <HistoryManagerProvider>
+                          <ModalProvider portalProvider={DialogProvider}>{children}</ModalProvider>
+                        </HistoryManagerProvider>
+                      </StyledUIKitProvider>
+                    </LanguageProvider>
+                  </NextThemeProvider>
+                </Provider>
+              </HydrationBoundary>
+            </W3WConfigProvider>
+          </WagmiProvider>
+        </QueryClientProvider>
+      </FirebaseAuthProvider>
+    )
+  }
+
   return (
     <FirebaseAuthProvider>
       <PrivyProvider>

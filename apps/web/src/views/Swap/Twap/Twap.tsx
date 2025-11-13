@@ -1,4 +1,4 @@
-import { Orders, TWAP as PancakeTWAP, ToastProps } from '@orbs-network/twap-ui-pancake'
+import type { ToastProps } from '@orbs-network/twap-ui-pancake'
 import { useTheme } from '@pancakeswap/hooks'
 import { Percent } from '@pancakeswap/sdk'
 import { Currency, CurrencyAmount, TradeType } from '@pancakeswap/swap-sdk-core'
@@ -48,6 +48,14 @@ import { SwapTransactionErrorContent } from '../components/SwapTransactionErrorC
 import useWarningImport from '../hooks/useWarningImport'
 
 const Lottie = dynamic(() => import('lottie-react'), { ssr: false })
+
+const PancakeTWAP = dynamic(() => import('@orbs-network/twap-ui-pancake').then((mod) => mod.TWAP), {
+  ssr: false,
+})
+
+const Orders = dynamic(() => import('@orbs-network/twap-ui-pancake').then((mod) => mod.Orders), {
+  ssr: false,
+})
 
 const useBestTrade = (fromToken?: string, toToken?: string, value?: string) => {
   const independentCurrency = useCurrency(fromToken)
