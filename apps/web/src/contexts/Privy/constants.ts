@@ -9,5 +9,7 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID ?? '',
 }
 
-// Initialize Firebase
-export const firebaseApp = initializeApp(firebaseConfig)
+export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.appId)
+
+// Initialize Firebase only when configuration is present to avoid auth/invalid-api-key at runtime
+export const firebaseApp = isFirebaseConfigured ? initializeApp(firebaseConfig) : undefined
